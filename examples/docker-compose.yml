@@ -1,0 +1,49 @@
+# Minimal Odoo 18 CE stack for testing the migration tool.
+#
+# Bring up:   docker compose -f examples/docker-compose.yml up -d
+# Tear down:  docker compose -f examples/docker-compose.yml down -v
+#
+# Then run odoo18-ee2ce with:
+#   --db-container ee2ce-db
+#   --odoo-container ee2ce-odoo
+#   --db-user odoo
+#   --db-password odoo
+
+services:
+  db:
+    image: postgres:15
+    container_name: ee2ce-db
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_DB: postgres
+    volumes:
+      - ee2ce-db-data:/var/lib/postgresql/data
+    networks:
+      - ee2ce
+    restart: unless-stopped
+
+  odoo:
+    image: odoo:18.0
+    container_name: ee2ce-odoo
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:8069:8069"
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: odoo
+    volumes:
+      - ee2ce-odoo-data:/var/lib/odoo
+    networks:
+      - ee2ce
+    restart: unless-stopped
+
+volumes:
+  ee2ce-db-data:
+  ee2ce-odoo-data:
+
+networks:
+  ee2ce:
+    driver: bridge

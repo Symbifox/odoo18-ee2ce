@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "odoo18-ee2ce"
+version = "0.1.0"
+description = "Migrate an Odoo 18 Enterprise SaaS database dump into a fresh Community instance"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Blue Fox Inc.", email = "olivier@bluefoxconsultant.com" },
+]
+keywords = ["odoo", "migration", "enterprise", "community", "postgresql"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "psycopg2-binary>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+odoo18-ee2ce = "odoo18_ee2ce.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bluefoxconsultant/odoo18-ee2ce"
+Repository = "https://github.com/bluefoxconsultant/odoo18-ee2ce"
+Issues = "https://github.com/bluefoxconsultant/odoo18-ee2ce/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["odoo18_ee2ce"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

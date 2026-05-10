@@ -1,0 +1,4 @@
+# One table name per line. Lines starting with # are comments.
+# Use this file via:  --skip-tables-extra ./my-skip.txt
+my_custom_helper_table
+my_legacy_audit_log

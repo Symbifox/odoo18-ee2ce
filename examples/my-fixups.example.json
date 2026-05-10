@@ -1,0 +1,9 @@
+{
+  "_comment": "Example NOT_NULL_FIXUPS overrides. Format: { table: { column: [default_sql, custom_update_sql_or_null] } }",
+  "stock_warehouse": {
+    "calendar_id": ["1", null]
+  },
+  "mrp_bom": {
+    "consumption": ["'flexible'", null]
+  }
+}
