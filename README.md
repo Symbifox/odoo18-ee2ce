@@ -258,12 +258,21 @@ Bug reports and PRs welcome. The most useful contributions are:
 
 ## License
 
-LGPL-3.0-or-later — see [LICENSE](LICENSE).
+Copyright (c) 2026 Les services de consultation Blue Fox, Inc.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the LGPL-3 terms
+and [LICENSE.GPL-3](LICENSE.GPL-3) for the GPL-3 text it incorporates, or
+<https://www.gnu.org/licenses/>.
 
 It is not an Odoo module and imports nothing from Odoo, so no licence is
-inherited; copyleft here is a choice. The value of this tool accumulates in its
-skip lists and its NOT NULL fixups, which is exactly the part worth getting
-back. The lesser variant leaves you free to import `odoo18_ee2ce` as a library
-inside your own migration tooling.
+inherited; copyleft here is a choice. What is worth anything in this tool is
+its skip lists and its NOT NULL fixups, which grow one migration at a time, and
+that is the part worth getting back. The lesser variant leaves you free to
+import `odoo18_ee2ce` as a library inside your own migration tooling.
 
 Built and used in production by [Symbifox](https://symbifox.com) (Les services de consultation Blue Fox, Inc.) to migrate the company's own SaaS instance to self-hosted Community in February 2026.
