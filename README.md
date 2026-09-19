@@ -239,6 +239,8 @@ Bug reports and PRs welcome. The most useful contributions are:
 - New entries in `config/skip_tables.py` for Enterprise modules added in newer Odoo 18 builds
 - Cases for `tests/make_ee_fixture.py` — a table or column shape that broke on
   your dump is worth more than a bug report
+- Parser edge cases in `tests/fixtures/`, for dump syntax the single-pass
+  reader mishandles
 
 ## License
 
