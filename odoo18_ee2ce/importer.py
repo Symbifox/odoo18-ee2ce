@@ -90,26 +90,56 @@ def import_table_relaxed(conn, dump_path, block, community_columns, defaults):
     count, status = import_table(conn, dump_path, block, community_columns)
     conn.commit()
 
-    # Apply defaults for NULL values
+    # Apply defaults for NULL values.
+    #
+    # A fixup entry may name a column this particular Community install does
+    # not have: NOT_NULL_FIXUPS is a static map, but the target schema depends
+    # on which modules were installed. Skip those, and never let one bad fixup
+    # abort the rest -- the NOT NULL constraints were dropped above, and the
+    # restore loop below is the only thing that puts them back.
+    comm_set = set(community_columns)
+    skipped_fixups = []
+    failed_fixups = []
     for col, (default_val, custom_sql) in defaults.items():
-        with conn.cursor() as cur:
-            if custom_sql:
-                cur.execute(f'UPDATE "{block.table}" {custom_sql}')
-            else:
-                cur.execute(
-                    f'UPDATE "{block.table}" SET "{col}" = {default_val} WHERE "{col}" IS NULL'
-                )
-    conn.commit()
+        if col not in comm_set:
+            skipped_fixups.append(col)
+            continue
+        try:
+            with conn.cursor() as cur:
+                if custom_sql:
+                    cur.execute(f'UPDATE "{block.table}" {custom_sql}')
+                else:
+                    cur.execute(
+                        f'UPDATE "{block.table}" SET "{col}" = {default_val} '
+                        f'WHERE "{col}" IS NULL'
+                    )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            failed_fixups.append(f"{col}: {str(e).splitlines()[0][:60]}")
 
     # Re-add NOT NULL where all values are non-null
+    restored = 0
     for col in nn_cols:
-        with conn.cursor() as cur:
-            cur.execute(f'SELECT COUNT(*) FROM "{block.table}" WHERE "{col}" IS NULL')
-            if cur.fetchone()[0] == 0:
-                try:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f'SELECT COUNT(*) FROM "{block.table}" WHERE "{col}" IS NULL')
+                if cur.fetchone()[0] == 0:
                     cur.execute(f'ALTER TABLE "{block.table}" ALTER COLUMN "{col}" SET NOT NULL')
-                except Exception:
-                    conn.rollback()
+                    restored += 1
+            conn.commit()
+        except Exception:
+            conn.rollback()
     conn.commit()
+
+    notes = []
+    if skipped_fixups:
+        notes.append(f"fixups n/a: {', '.join(skipped_fixups)}")
+    if failed_fixups:
+        notes.append(f"fixups failed: {'; '.join(failed_fixups)}")
+    if len(nn_cols) and restored < len(nn_cols):
+        notes.append(f"NOT NULL restored {restored}/{len(nn_cols)}")
+    if notes:
+        status = f"{status} [{' | '.join(notes)}]"
 
     return count, status

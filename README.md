@@ -56,13 +56,13 @@ See `odoo18_ee2ce/config/skip_tables.py` for the full list.
 
 ```bash
 # Via uv (recommended)
-uv tool install git+https://github.com/bluefoxconsultant/odoo18-ee2ce
+uv tool install git+https://github.com/Symbifox/odoo18-ee2ce
 
 # Or pipx
-pipx install git+https://github.com/bluefoxconsultant/odoo18-ee2ce
+pipx install git+https://github.com/Symbifox/odoo18-ee2ce
 
 # Or local checkout
-git clone https://github.com/bluefoxconsultant/odoo18-ee2ce
+git clone https://github.com/Symbifox/odoo18-ee2ce
 cd odoo18-ee2ce
 pip install -e .
 ```
@@ -152,10 +152,69 @@ Format is `[default_value_sql, optional_custom_update_sql]`. If the second eleme
 }
 ```
 
+## Validation status
+
+Read this before you point it at a database you care about.
+
+**The pipeline runs end to end against an Enterprise-shaped dump.** Phases 0
+through 8, against a purpose-built fixture: 62 `COPY` blocks, 18,543 rows, 28
+tables shared with Community, 18 Enterprise-only tables, 16 framework tables
+that have to be skipped, and 40 Enterprise-only columns scattered through the
+shared tables' column lists. Last run: **28 tables imported, 17,634 rows, 0
+errors**, every table matching its expected row count, and the resulting
+database read back through the Odoo ORM afterwards.
+
+**What the fixture is, exactly.** `tests/make_ee_fixture.py` builds it against
+a live, freshly initialized Community database. The table names and row counts
+are transcribed from a measured inventory of a real Odoo 18 Enterprise SaaS
+database — saas~18.3.1.3, 939 tables, 293 installed modules of which 135 were
+Enterprise-only. The column names marked `x_ee_*` are synthetic; the others are
+Enterprise field names, and the generator does not take them on trust: each one
+is checked against the live Community schema and discarded if it already exists
+there. What survives is, by construction, a column Community does not have —
+which is the only property the intersection step depends on. Row values are
+synthetic but type-correct against the live schema (jsonb translations,
+timestamps, numerics, bytea), written in PostgreSQL text-`COPY` format with real
+escaping.
+
+**What that does not prove.** The fixture is not a real Enterprise dump. It does
+not carry Odoo's actual Enterprise column layouts, the real volumes (193 MB of
+SQL, 2,032 filestore files), or the accidents a long-lived production database
+accumulates. Treat the first run against your own dump as an experiment: work on
+a copy, read Phase 4's error list rather than the summary line, and expect to add
+entries to `not_null_fixups.py` and `skip_tables.py`.
+
+**Known not to be covered.** Enterprise helpdesk → OCA `helpdesk_mgmt` mapping
+(dropped on purpose, see Limitations). Studio fields. Multi-company dumps — the
+reference instance was single-company, so the company-scoped paths are untested.
+
+### Running the validation yourself
+
+```bash
+# 1. A throwaway Community target
+docker run -d --name ee2ce-db --network ee2ce-net --network-alias db \
+    -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo postgres:15
+docker run -d --name ee2ce-odoo --network ee2ce-net \
+    -e ODOO_RC=/etc/odoo/odoo.conf --entrypoint sleep odoo:18 infinity
+docker exec ee2ce-odoo odoo -d ee2ce_target -i base,account,crm,project,sale \
+    --stop-after-init --no-http --without-demo=all
+
+# 2. Generate the Enterprise-shaped dump from that schema
+python tests/make_ee_fixture.py --host <db-ip> --db ee2ce_target \
+    --user odoo --password odoo --out /tmp/ee-fixture
+
+# 3. Run the migration against it
+odoo18-ee2ce --dump /tmp/ee-fixture/dump.sql --target-db ee2ce_target \
+    --db-container ee2ce-db --odoo-container ee2ce-odoo --db-user odoo \
+    --db-password odoo --verify-counts /tmp/verify_counts.json
+```
+
+The unit tests need no database: `pytest tests/`.
+
 ## Limitations
 
 - **Odoo 18 only.** The skip lists and NOT NULL fixups are version-specific. Older versions need different rules.
-- **No Studio support.** `x_studio_*` fields are dropped on import. If your Enterprise instance uses Studio extensively, port custom fields to a Community module (e.g., [bf_studio_light](https://github.com/bluefoxconsultant/odoo-modules/tree/main/bf_studio_light)) before migration.
+- **No Studio support.** `x_studio_*` fields are dropped on import. If your Enterprise instance uses Studio extensively, port custom fields to a Community module before migration — [Symbifox Forge](https://github.com/Symbifox/odoo-modules/tree/main/bf_studio_light) does this without writing one, though it is proprietary rather than free software.
 - **One-shot import.** Creates a new database; doesn't merge into an existing one.
 - **Filestore assumes Docker volumes.** The `docker cp` approach requires the Odoo container to be running.
 - **Enterprise-only data is lost.** Modules without Community/OCA equivalents (Knowledge articles, Sign requests, Planning shifts, Marketing automation flows, Subscriptions) have their data skipped. Small datasets can be manually recreated; larger ones require custom migration.
@@ -178,10 +237,11 @@ Bug reports and PRs welcome. The most useful contributions are:
 
 - New entries in `config/not_null_fixups.py` for tables you hit
 - New entries in `config/skip_tables.py` for Enterprise modules added in newer Odoo 18 builds
-- Test fixtures in `tests/fixtures/` covering edge cases
+- Cases for `tests/make_ee_fixture.py` — a table or column shape that broke on
+  your dump is worth more than a bug report
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-Built and used in production by [Blue Fox Inc.](https://bluefoxconsultant.com) to migrate the company's own SaaS instance to self-hosted Community in February 2026.
+Built and used in production by [Symbifox](https://symbifox.com) (Les services de consultation Blue Fox, Inc.) to migrate the company's own SaaS instance to self-hosted Community in February 2026.

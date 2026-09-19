@@ -49,6 +49,20 @@ For complex defaults that need referencing other columns:
 }
 ```
 
+## Status line says "fixups n/a: some_column"
+
+The built-in `NOT_NULL_FIXUPS` names a column your target does not have. That
+is expected, not an error: the fixup map is static, while the target schema is
+whatever your `--modules` list produced. `product_template.ticket_active`, for
+one, only exists once the event modules are installed. The fixup is skipped,
+the rest still run, and the `NOT NULL` constraints dropped for the import are
+put back.
+
+If you see "fixups failed: some_column: ..." instead, that one did run and
+errored. The rows are still in — the import commits before the fixups — but the
+column may be left holding NULLs where Community wants a value. Fix the default
+and re-run, or patch the column by hand.
+
 ## "duplicate key value violates unique constraint"
 
 A sequence got out of sync. Phase 5 should have handled this, but if you used `--skip-init` on a DB that already had data, the sequences may have been reset incorrectly. Re-run with full init or manually fix:

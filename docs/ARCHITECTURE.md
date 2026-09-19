@@ -86,6 +86,6 @@ Importing rows with FKs in arbitrary order would fail half the time (child befor
 
 ## What's not handled (and why)
 
-- **Studio fields** (`x_studio_*`). These are dynamically created via `ir_model_fields` records in Enterprise. Without that table imported, the columns exist in the dump but the Community schema doesn't have them — they're dropped by the column intersection. To preserve, port Studio definitions to a Community module like [bf_studio_light](https://github.com/bluefoxconsultant/odoo-modules/tree/main/bf_studio_light) before migration.
+- **Studio fields** (`x_studio_*`). These are dynamically created via `ir_model_fields` records in Enterprise. Without that table imported, the columns exist in the dump but the Community schema doesn't have them — they're dropped by the column intersection. To preserve, port Studio definitions to a Community module before migration, by hand or with a field builder such as [Symbifox Forge](https://github.com/Symbifox/odoo-modules/tree/main/bf_studio_light).
 - **Helpdesk Enterprise → OCA helpdesk_mgmt mapping.** v1 had a per-field mapping; the schemas diverge enough that data quality was poor. v2 punts: tickets are recreated manually, or the user installs the [Enterprise helpdesk OCA reimplementation](https://github.com/OCA/helpdesk).
 - **Sign / Documents / Knowledge / Planning data.** No Community equivalent. Data is skipped.

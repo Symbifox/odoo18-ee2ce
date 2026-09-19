@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "odoo18-ee2ce"
-version = "0.1.0"
+version = "0.2.0"
 description = "Migrate an Odoo 18 Enterprise SaaS database dump into a fresh Community instance"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [
-    { name = "Blue Fox Inc.", email = "olivier@bluefoxconsultant.com" },
+    { name = "Symbifox (Les services de consultation Blue Fox, Inc.)", email = "olivier@bluefoxconsultant.com" },
 ]
 keywords = ["odoo", "migration", "enterprise", "community", "postgresql"]
 classifiers = [
@@ -39,9 +39,10 @@ dev = [
 odoo18-ee2ce = "odoo18_ee2ce.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/bluefoxconsultant/odoo18-ee2ce"
-Repository = "https://github.com/bluefoxconsultant/odoo18-ee2ce"
-Issues = "https://github.com/bluefoxconsultant/odoo18-ee2ce/issues"
+Homepage = "https://github.com/Symbifox/odoo18-ee2ce"
+Repository = "https://github.com/Symbifox/odoo18-ee2ce"
+Issues = "https://github.com/Symbifox/odoo18-ee2ce/issues"
+Symbifox = "https://symbifox.com"
 
 [tool.hatch.build.targets.wheel]
 packages = ["odoo18_ee2ce"]
