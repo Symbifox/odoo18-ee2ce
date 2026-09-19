@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "odoo18-ee2ce"
-version = "0.3.0"
+version = "0.4.0"
 description = "Migrate an Odoo 18 Enterprise SaaS database dump into a fresh Community instance"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -19,7 +19,7 @@ This tool sidesteps the problem with a **fresh-init + business-data injection** 
 
 The result is a Community database with all your business data, ready to use, no `-u base` patching required.
 
-## How it works — the eight phases
+## How it works — the nine phases
 
 | Phase | What it does |
 |-------|--------------|
@@ -32,6 +32,7 @@ The result is a Community database with all your business data, ready to use, no
 | **6** | Copies the extracted Enterprise filestore into the Odoo container |
 | **7** | Neutralizes the new DB: disables outbound mail, regenerates `database.uuid`, sets a safe `web.base.url`, ensures `mail_alias_domain` has at least one row |
 | **8** | Prints row counts for verification |
+| **9** | Writes the Enterprise-only rows it could not place to `enterprise-leftovers.json` |
 
 ## What gets imported vs skipped
 
@@ -124,6 +125,41 @@ odoo18-ee2ce \
 3. `DB_PASSWORD` environment variable
 4. `DB_PASSWORD=` or `POSTGRES_PASSWORD=` in `.env` file (cwd or parent)
 
+## What is left behind
+
+Phase 9 writes every Enterprise-only table it could not place into
+`enterprise-leftovers.json`, next to the dump. The file is small — these tables
+are narrow and short compared to the business data — and it is plain JSON:
+
+```json
+{
+  "format": "odoo18-ee2ce/leftovers",
+  "format_version": 1,
+  "source": {"dump": "dump.sql", "db_name": "...", "version": "saas~18.3"},
+  "tables": {
+    "helpdesk_ticket": {
+      "columns": ["id", "name", "description", "..."],
+      "row_count": 22, "truncated": false,
+      "rows": [[1, "Printer down", "..."]]
+    }
+  }
+}
+```
+
+A table lands here when it is Enterprise business data with no Community home:
+matched by an Enterprise module prefix, absent from the freshly initialized
+target, or on the collision list. Framework tables, reference data and OCR
+scratch are not exported — losing them costs nothing.
+
+`--no-leftovers` turns it off, `--leftovers PATH` moves it,
+`--max-leftover-rows` caps each table (truncation is flagged per table in the
+file, not silent).
+
+The companion Odoo module `bf_oe2oc` reads this file inside the migrated
+instance and re-homes what has a credible target — helpdesk tickets to OCA
+`helpdesk_mgmt`, Knowledge articles to OCA `document_page` — keeping the rest
+browsable rather than lost.
+
 ## Adapting for your instance
 
 **Custom modules.** Override `--modules` with a comma-separated list. The default covers `base, account, contacts, crm, project, sale, sale_management, hr, hr_timesheet, website, website_blog, mass_mailing, calendar, helpdesk_mgmt, survey, product`. If your install needs `stock`, `mrp`, `purchase`, etc., add them.
@@ -162,9 +198,11 @@ tables shared with Community, 18 Enterprise-only tables, 16 framework tables
 that have to be skipped, and 40 Enterprise-only columns scattered through the
 shared tables' column lists. Last run: **28 tables imported, 17,950 rows, 0
 errors**, every table matching its expected row count, and the resulting
-database read back through the Odoo ORM afterwards. Repeated on four different
-`--seed` values, because a fixture that only passes on one seed is a fixture
-that is passing on luck.
+database read back through the Odoo ORM afterwards. Phase 9 wrote **915 rows
+across 18 Enterprise-only tables** to the leftovers file, which the companion
+module then loaded and re-homed. Repeated on four different `--seed` values,
+because a fixture that only passes on one seed is a fixture that is passing on
+luck.
 
 **What the fixture is, exactly.** `tests/make_ee_fixture.py` builds it against
 a live, freshly initialized Community database. The table names are transcribed
@@ -231,8 +269,8 @@ The unit tests need no database: `pytest tests/`.
 - **No Studio support.** `x_studio_*` fields are dropped on import. If your Enterprise instance uses Studio extensively, port custom fields to a Community module before migration — [Symbifox Forge](https://github.com/Symbifox/odoo-modules/tree/main/bf_studio_light) does this without writing one, though it is proprietary rather than free software.
 - **One-shot import.** Creates a new database; doesn't merge into an existing one.
 - **Filestore assumes Docker volumes.** The `docker cp` approach requires the Odoo container to be running.
-- **Enterprise-only data is lost.** Modules without Community/OCA equivalents (Knowledge articles, Sign requests, Planning shifts, Marketing automation flows, Subscriptions) have their data skipped. Small datasets can be manually recreated; larger ones require custom migration.
-- **OCA helpdesk swap.** Enterprise `helpdesk` data is not auto-mapped to OCA `helpdesk_mgmt`; the v1 attempt at this proved too brittle.
+- **Enterprise-only data is set aside, not migrated.** Modules without a Community or OCA equivalent (Knowledge articles, Sign requests, Planning shifts, Marketing automation flows, Subscriptions) have no table to land in. Since 0.4.0 their rows are written to `enterprise-leftovers.json` rather than dropped — see **What is left behind** below — but placing them on Community models is another tool's job.
+- **OCA helpdesk swap.** Enterprise `helpdesk` data is not auto-mapped to OCA `helpdesk_mgmt`; the v1 attempt at this proved too brittle. Note that `helpdesk_mgmt` names its table `helpdesk_ticket`, exactly like Enterprise: before 0.4.0 the planner saw the name in the target and imported into it, `DELETE FROM` included. That name is now on an explicit collision list and goes to the leftovers file instead.
 
 ## Lessons learned
 

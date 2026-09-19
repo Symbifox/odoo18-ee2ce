@@ -94,6 +94,41 @@ ENTERPRISE_ONLY = {
     "account_report_column": 100, "account_report_expression": 300,
 }
 
+# Column lists for the Enterprise-only tables a downstream tool is expected to
+# re-home. Everything else gets the generic shape below. These names are the
+# ones such a tool maps on, so the fixture has to carry them for the round trip
+# to mean anything.
+ENTERPRISE_ONLY_COLUMNS = {
+    "helpdesk_ticket": [
+        ("id", "integer"), ("name", "character varying"),
+        ("description", "text"), ("partner_id", "integer"),
+        ("partner_name", "character varying"),
+        ("partner_email", "character varying"),
+        ("priority", "character varying"), ("stage_id", "integer"),
+        ("team_id", "integer"), ("user_id", "integer"),
+        ("kanban_state", "character varying"), ("active", "boolean"),
+        ("company_id", "integer"), ("create_date", "timestamp"),
+        ("close_date", "timestamp"),
+    ],
+    "knowledge_article": [
+        ("id", "integer"), ("name", "jsonb"), ("body", "text"),
+        ("parent_id", "integer"), ("sequence", "integer"),
+        ("active", "boolean"), ("company_id", "integer"),
+        ("create_date", "timestamp"),
+    ],
+    "sign_template": [
+        ("id", "integer"), ("name", "character varying"),
+        ("attachment_id", "integer"), ("active", "boolean"),
+        ("company_id", "integer"), ("create_date", "timestamp"),
+    ],
+    "sale_subscription_plan": [
+        ("id", "integer"), ("name", "jsonb"), ("billing_period_value", "integer"),
+        ("billing_period_unit", "character varying"), ("active", "boolean"),
+        ("company_id", "integer"),
+    ],
+}
+
+
 # Proposed Enterprise-only columns, by the module that adds them. Any name that
 # turns out to exist in Community is discarded at generation time.
 EE_COLUMNS = {
@@ -154,6 +189,16 @@ EE_COLUMNS = {
 # Values chosen so the generated rows satisfy the Community CHECK constraints.
 # Without these the run drowns in fixture noise and the real findings get lost.
 # Each entry names the constraint it exists to satisfy.
+# Columns whose value must be a real code whatever table they sit on. A
+# garbage `lang` or `tz` does not merely look wrong: Odoo raises on every call
+# that resolves it, and the migrated database is unusable until someone finds
+# the offending rows. A real Enterprise dump carries valid ones, so the fixture
+# should too.
+GLOBAL_OVERRIDES = {
+    "lang": "en_US",
+    "tz": "America/Toronto",
+}
+
 COLUMN_OVERRIDES = {
     # account_group_check_length_prefix: both prefixes must be the same length
     "account_group": {"code_prefix_start": "1000", "code_prefix_end": "9999"},
@@ -162,6 +207,9 @@ COLUMN_OVERRIDES = {
     # line_section / line_note pair that the constraint exempts.
     # account_move_line_check_amount_currency_balance_sign: balance and
     # amount_currency must not disagree on sign
+    # Enterprise helpdesk priority runs 0..3, like the OCA field it lands on.
+    "helpdesk_ticket": {"priority": "1", "partner_id": None,
+                        "stage_id": None, "team_id": None, "user_id": None},
     "account_move_line": {"credit": "0.00", "display_type": "product",
                           "account_id": "1", "debit": "125.00",
                           "balance": "125.00", "amount_currency": "125.00"},
@@ -343,6 +391,8 @@ def copy_block(out, table, columns, types, nullables, nrows,
         fields = []
         for c in columns:
             ov = overrides.get(c, _UNSET) if overrides else _UNSET
+            if ov is _UNSET and c in GLOBAL_OVERRIDES:
+                ov = GLOBAL_OVERRIDES[c]
             v = gen_value(c, types.get(c, "text"), rid, nullables.get(c, True),
                           maxlen=maxlens.get(c), override=ov)
             ml = maxlens.get(c)
@@ -386,17 +436,24 @@ def main():
         # Enterprise-only tables: DDL plus data, so the planner has to notice
         # the Community target simply has no such table.
         for table, nrows in sorted(ENTERPRISE_ONLY.items()):
-            cols = ["id", "create_uid", "create_date", "write_uid", "write_date",
-                    "name", "active", "sequence", "company_id"]
-            types = {"id": "integer", "create_uid": "integer", "write_uid": "integer",
-                     "create_date": "timestamp", "write_date": "timestamp",
-                     "name": "jsonb", "active": "boolean", "sequence": "integer",
-                     "company_id": "integer"}
+            spec = ENTERPRISE_ONLY_COLUMNS.get(table)
+            if spec:
+                cols = [c for c, _t in spec]
+                types = dict(spec)
+            else:
+                cols = ["id", "create_uid", "create_date", "write_uid",
+                        "write_date", "name", "active", "sequence", "company_id"]
+                types = {"id": "integer", "create_uid": "integer",
+                         "write_uid": "integer", "create_date": "timestamp",
+                         "write_date": "timestamp", "name": "jsonb",
+                         "active": "boolean", "sequence": "integer",
+                         "company_id": "integer"}
             nullables = {c: c != "id" for c in cols}
             out.write(f"--\n-- Name: {table}; Type: TABLE; Schema: public; Owner: -\n--\n\n")
             out.write(f"CREATE TABLE public.{table} (\n    id integer NOT NULL,\n"
                       "    name jsonb\n);\n\n\n")
-            copy_block(out, table, cols, types, nullables, nrows)
+            copy_block(out, table, cols, types, nullables, nrows,
+                       overrides=COLUMN_OVERRIDES.get(table))
             stats["rows"] += nrows
 
         # Framework tables the importer is expected to skip.

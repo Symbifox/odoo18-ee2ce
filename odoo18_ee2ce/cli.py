@@ -18,6 +18,7 @@ from odoo18_ee2ce.config import (
 from odoo18_ee2ce.db import connect, load_db_creds
 from odoo18_ee2ce.docker_helpers import docker_exec, get_db_host
 from odoo18_ee2ce.filestore import copy_filestore
+from odoo18_ee2ce.leftovers import collect, export_leftovers
 from odoo18_ee2ce.importer import import_table, import_table_relaxed
 from odoo18_ee2ce.neutralize import neutralize
 from odoo18_ee2ce.parser import parse_dump
@@ -94,6 +95,15 @@ Password resolution order:
                              "for the verification phase")
     parser.add_argument("--neutralize-base-url", default="http://localhost:8069",
                         help="web.base.url to set during neutralization")
+    parser.add_argument("--leftovers", default=None,
+                        help="Where to write the Enterprise-only data that has no "
+                             "Community home (default: <dump-dir>/enterprise-leftovers.json). "
+                             "Feed this file to the bf_oe2oc module inside the migrated "
+                             "instance to re-home the rows.")
+    parser.add_argument("--no-leftovers", action="store_true",
+                        help="Do not export Enterprise-only data")
+    parser.add_argument("--max-leftover-rows", type=int, default=100000,
+                        help="Per-table cap on exported rows (default: 100000)")
     return parser.parse_args()
 
 
@@ -129,6 +139,18 @@ def _load_verify_counts(path):
         sys.exit(f"ERROR: --verify-counts file not found: {path}")
     with open(path) as f:
         return json.load(f)
+
+
+def _load_manifest(dump_path):
+    """Read the SaaS export's manifest.json, if it sits next to the dump."""
+    path = os.path.join(os.path.dirname(os.path.abspath(dump_path)), "manifest.json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def _resolve_filestore_default(dump_path):
@@ -290,6 +312,13 @@ def main():
         print("\n  DRY RUN — tables that would be imported:")
         for table, block, rows in import_plan:
             print(f"    {table:50s} {rows:>8,d} rows  {len(block.columns)} cols")
+        if not args.no_leftovers:
+            planned = {t for t, _b, _r in import_plan}
+            leftover = collect(blocks, target_tables, planned, args.max_leftover_rows)
+            print(f"\n  DRY RUN — Enterprise-only data that would be exported "
+                  f"({len(leftover)} tables):")
+            for table, _block, rows in leftover:
+                print(f"    {table:50s} {rows:>8,d} rows")
         return
 
     # ── Phase 4: Import data ──
@@ -364,6 +393,25 @@ def main():
     print("\nPhase 8: Verification...")
     all_ok = verify(conn, expected_counts=expected_counts, imported_tables=imported_tables)
 
+    # ── Phase 9: Export the Enterprise-only data ──
+    leftover_tables = leftover_rows = 0
+    leftover_path = None
+    if args.no_leftovers:
+        print("\nPhase 9: Skipped (--no-leftovers)")
+    else:
+        print("\nPhase 9: Exporting Enterprise-only data...")
+        out_path = args.leftovers or os.path.join(
+            os.path.dirname(os.path.abspath(args.dump)), "enterprise-leftovers.json")
+        try:
+            leftover_tables, leftover_rows, leftover_path = export_leftovers(
+                args.dump, blocks, target_tables, imported_tables, out_path,
+                manifest=_load_manifest(args.dump), target_db=args.target_db,
+                max_rows=args.max_leftover_rows)
+        except Exception as e:
+            # The migration itself is done and committed by now; failing to
+            # write a side file must not read as a failed migration.
+            print(f"  WARNING: could not write {out_path}: {e}")
+
     # ── Summary ──
     print("\n" + "=" * 70)
     print("  SUMMARY")
@@ -371,6 +419,9 @@ def main():
     print(f"  Tables imported: {len(imported_tables)}")
     print(f"  Total rows:      {total_rows:,d}")
     print(f"  Errors:          {len(errors)}")
+    if leftover_path:
+        print(f"  Left behind:     {leftover_rows:,d} rows in {leftover_tables} "
+              f"Enterprise-only tables")
     if expected_counts:
         print(f"  Data integrity:  {'ALL OK' if all_ok else 'ISSUES — check above'}")
 
@@ -386,6 +437,9 @@ def main():
     print(f"    4. Activate any non-default languages: "
           f"UPDATE res_lang SET active = true WHERE code = '<lang>'")
     print(f"    5. Revert dbfilter when done testing")
+    if leftover_path:
+        print(f"    6. Install bf_oe2oc and feed it {os.path.basename(leftover_path)} "
+              f"to re-home the Enterprise data")
 
 
 if __name__ == "__main__":

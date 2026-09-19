@@ -29,3 +29,18 @@ def test_skip_enterprise_prefix():
 def test_extra_skip_table_param():
     assert should_skip("my_custom_table", extra_skip={"my_custom_table"}) is True
     assert should_skip("my_custom_table") is False
+
+
+def test_oca_name_collision_is_never_imported():
+    """`helpdesk_mgmt` (OCA) owns a table named exactly like the Enterprise one.
+
+    Importing into it would DELETE the OCA rows and then column-intersect two
+    unrelated schemas, silently: `number` and `description` are required by the
+    ORM, not by Postgres, so the COPY succeeds and the tickets are wrong.
+    """
+    from odoo18_ee2ce.config import should_skip, is_enterprise_data
+
+    assert should_skip("helpdesk_ticket") is True
+    # And it must not simply vanish: skipped here means exported there.
+    assert is_enterprise_data("helpdesk_ticket", in_target=True) is True
+    assert is_enterprise_data("helpdesk_ticket", in_target=False) is True

@@ -71,20 +71,51 @@ SKIP_TABLES = {
     "website_configurator_feature", "website_snippet_filter", "website_lang_rel",
 }
 
-# Prefix-based skip for Enterprise-only module tables that have no Community equivalent
-SKIP_PREFIXES = (
-    "saas_", "documents_", "sign_", "planning_", "social_",
-    "marketing_automation_", "knowledge_", "studio_",
+# Prefixes are split in two, because "skip" answers one question and the export
+# answers another. Both groups are skipped on import; only the second holds
+# anything a human would miss afterwards.
+
+# Infrastructure, OCR scratch and Enterprise UI state. Nothing to re-home.
+FRAMEWORK_PREFIXES = (
+    "saas_", "studio_",
     "web_gantt_", "web_grid_",
+    "timer_",
+    "account_accountant", "account_avatax", "account_predictive",
+    "account_extract", "account_invoice_extract",
+    "account_bank_statement_extract", "account_online_",
+)
+
+# Enterprise (and, for `pos_`, Community) business data with no place to land
+# in the freshly initialized target. Skipped on import all the same -- the
+# tables do not exist there -- but worth handing back rather than dropping on
+# the floor. See `export_leftovers`.
+ENTERPRISE_DATA_PREFIXES = (
+    "documents_", "sign_", "planning_", "social_",
+    "marketing_automation_", "knowledge_",
     "appointment_", "helpdesk_sla",
     "sale_subscription_", "project_forecast",
-    "account_asset", "account_report", "account_accountant",
-    "account_consolidation", "account_avatax",
-    "account_bank_statement_extract", "account_debit_note",
-    "account_extract", "account_invoice_extract", "account_loans",
-    "account_online_", "account_predictive",
-    "timer_", "voip_", "whatsapp_", "pos_",
+    "account_asset", "account_report",
+    "account_consolidation", "account_debit_note", "account_loans",
+    "voip_", "whatsapp_", "pos_",
 )
+
+# Same table name on both sides, different thing inside.
+#
+# `helpdesk_mgmt` (OCA) names its table `helpdesk_ticket`, exactly like
+# Enterprise helpdesk, and the module is in DEFAULT_MODULES. Without this list
+# the planner sees the name in the target and imports into it: `DELETE FROM
+# helpdesk_ticket` first, wiping whatever the OCA module had, then a column
+# intersection between two schemas that merely share a few field names. The
+# rows land -- `number` and `description` are only required at the ORM level,
+# not in Postgres -- so nothing fails and the tickets are quietly wrong.
+#
+# These are skipped on import and handed to the leftovers export instead,
+# where a module on the other side can map them field by field.
+EE_OCA_COLLISIONS = frozenset({
+    "helpdesk_ticket",
+})
+
+SKIP_PREFIXES = FRAMEWORK_PREFIXES + ENTERPRISE_DATA_PREFIXES
 
 
 def should_skip(table_name, extra_skip=None, extra_prefixes=None):
@@ -96,6 +127,8 @@ def should_skip(table_name, extra_skip=None, extra_prefixes=None):
         extra_prefixes: Additional tuple of prefixes to skip (override).
     """
     if table_name in SKIP_TABLES:
+        return True
+    if table_name in EE_OCA_COLLISIONS:
         return True
     if extra_skip and table_name in extra_skip:
         return True
@@ -110,3 +143,33 @@ def should_skip(table_name, extra_skip=None, extra_prefixes=None):
     if table_name.startswith("ir_") and table_name != "ir_attachment":
         return True
     return False
+
+
+def is_enterprise_data(table_name, in_target):
+    """Is this a table whose rows someone would miss after the migration?
+
+    Answers a different question from `should_skip`. A table is skipped when
+    importing it would do harm or nothing; it is *leftover data* when the rows
+    have business meaning and the Community target has nowhere to put them --
+    helpdesk tickets, Knowledge articles, Sign templates, subscriptions.
+
+    Args:
+        table_name: PostgreSQL table name from the dump.
+        in_target: whether the freshly initialized target has this table.
+    """
+    if table_name in EE_OCA_COLLISIONS:
+        # Skipped on import precisely so it can come out here instead.
+        return True
+    if table_name in SKIP_TABLES:
+        return False
+    if table_name.startswith("ir_"):
+        return False
+    for prefix in FRAMEWORK_PREFIXES:
+        if table_name.startswith(prefix):
+            return False
+    for prefix in ENTERPRISE_DATA_PREFIXES:
+        if table_name.startswith(prefix):
+            return True
+    # Present in the Enterprise dump, absent from Community: by definition
+    # there is no Community home for it.
+    return not in_target

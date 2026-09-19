@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0 — 2026-09-18
+
+**Added**
+
+- **Phase 9 writes what the migration could not place.** Enterprise-only tables
+  were counted in the summary and then dropped with the dump. They now go to
+  `enterprise-leftovers.json` next to it: plain JSON, one entry per table, with
+  the original columns and rows. `--no-leftovers`, `--leftovers PATH` and
+  `--max-leftover-rows` control it; truncation is recorded per table rather
+  than left silent.
+- `config.is_enterprise_data()`, and a split of `SKIP_PREFIXES` into
+  `FRAMEWORK_PREFIXES` and `ENTERPRISE_DATA_PREFIXES`. "Skip on import" and
+  "worth handing back" are different questions; they were one list before.
+  `should_skip()` behaves exactly as it did.
+
+**Fixed**
+
+- **An OCA module could have its table emptied and refilled with Enterprise
+  rows.** `helpdesk_mgmt` names its table `helpdesk_ticket`, exactly like
+  Enterprise helpdesk, and it is in `DEFAULT_MODULES`. The planner saw the name
+  in the target and imported into it: `DELETE FROM helpdesk_ticket` first,
+  wiping whatever the OCA module held, then a column intersection between two
+  schemas that merely share a few field names. Nothing failed — `number` and
+  `description` are required by the ORM, not by Postgres — so the tickets were
+  quietly wrong. Such names are now on an explicit collision list, skipped on
+  import and sent to the leftovers file. The README claimed the opposite
+  behaviour; it was only true when `helpdesk_mgmt` was absent.
+
 ## 0.3.0 — 2026-09-18
 
 **Changed**
