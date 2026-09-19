@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "odoo18-ee2ce"
-version = "0.2.0"
+version = "0.3.0"
 description = "Migrate an Odoo 18 Enterprise SaaS database dump into a fresh Community instance"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = { text = "LGPL-3.0-or-later" }
 authors = [
     { name = "Symbifox (Les services de consultation Blue Fox, Inc.)", email = "olivier@bluefoxconsultant.com" },
 ]
@@ -16,7 +16,7 @@ keywords = ["odoo", "migration", "enterprise", "community", "postgresql"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",

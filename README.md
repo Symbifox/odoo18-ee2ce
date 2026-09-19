@@ -2,7 +2,7 @@
 
 Import an **Odoo 18 Enterprise SaaS** database dump into a self-hosted **Community** instance, the way you wished `pg_restore` could.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python: 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Odoo: 18.0](https://img.shields.io/badge/odoo-18.0-714B67.svg)](https://www.odoo.com)
 
@@ -157,18 +157,22 @@ Format is `[default_value_sql, optional_custom_update_sql]`. If the second eleme
 Read this before you point it at a database you care about.
 
 **The pipeline runs end to end against an Enterprise-shaped dump.** Phases 0
-through 8, against a purpose-built fixture: 62 `COPY` blocks, 18,543 rows, 28
+through 8, against a purpose-built fixture: 62 `COPY` blocks, 18,865 rows, 28
 tables shared with Community, 18 Enterprise-only tables, 16 framework tables
 that have to be skipped, and 40 Enterprise-only columns scattered through the
-shared tables' column lists. Last run: **28 tables imported, 17,634 rows, 0
+shared tables' column lists. Last run: **28 tables imported, 17,950 rows, 0
 errors**, every table matching its expected row count, and the resulting
-database read back through the Odoo ORM afterwards.
+database read back through the Odoo ORM afterwards. Repeated on four different
+`--seed` values, because a fixture that only passes on one seed is a fixture
+that is passing on luck.
 
 **What the fixture is, exactly.** `tests/make_ee_fixture.py` builds it against
-a live, freshly initialized Community database. The table names and row counts
-are transcribed from a measured inventory of a real Odoo 18 Enterprise SaaS
-database — saas~18.3.1.3, 939 tables, 293 installed modules of which 135 were
-Enterprise-only. The column names marked `x_ee_*` are synthetic; the others are
+a live, freshly initialized Community database. The table names are transcribed
+from a measured inventory of a real Odoo 18 Enterprise SaaS database —
+saas~18.3.1.3, 939 tables, 293 installed modules of which 135 were
+Enterprise-only — and the row counts are that inventory rounded to orders of
+magnitude, which keeps the proportions realistic without publishing anyone's
+activity profile. The column names marked `x_ee_*` are synthetic; the others are
 Enterprise field names, and the generator does not take them on trust: each one
 is checked against the live Community schema and discarded if it already exists
 there. What survives is, by construction, a column Community does not have —
@@ -191,23 +195,33 @@ reference instance was single-company, so the company-scoped paths are untested.
 ### Running the validation yourself
 
 ```bash
-# 1. A throwaway Community target
-docker run -d --name ee2ce-db --network ee2ce-net --network-alias db \
-    -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo postgres:15
-docker run -d --name ee2ce-odoo --network ee2ce-net \
-    -e ODOO_RC=/etc/odoo/odoo.conf --entrypoint sleep odoo:18 infinity
-docker exec ee2ce-odoo odoo -d ee2ce_target -i base,account,crm,project,sale \
+# 1. A throwaway Community target (the compose file ships with this repo)
+docker compose -f examples/docker-compose.yml up -d
+docker exec ee2ce-odoo odoo -d ee2ce_target \
+    -i base,account,contacts,crm,project,sale,sale_management,hr,\
+hr_timesheet,website,website_blog,mass_mailing,calendar,survey,product \
     --stop-after-init --no-http --without-demo=all
 
-# 2. Generate the Enterprise-shaped dump from that schema
-python tests/make_ee_fixture.py --host <db-ip> --db ee2ce_target \
-    --user odoo --password odoo --out /tmp/ee-fixture
+# 2. Generate the Enterprise-shaped dump from that live schema
+python tests/make_ee_fixture.py --db ee2ce_target --user odoo \
+    --password odoo --out /tmp/ee-fixture \
+    --host "$(docker inspect ee2ce-db \
+        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
 
 # 3. Run the migration against it
 odoo18-ee2ce --dump /tmp/ee-fixture/dump.sql --target-db ee2ce_target \
     --db-container ee2ce-db --odoo-container ee2ce-odoo --db-user odoo \
-    --db-password odoo --verify-counts /tmp/verify_counts.json
+    --db-password odoo --modules base,account,contacts,crm,project,sale,\
+sale_management,hr,hr_timesheet,website,website_blog,mass_mailing,calendar,\
+survey,product
+
+# 4. Tear it down
+docker compose -f examples/docker-compose.yml down -v
 ```
+
+Pass `--verify-counts` a JSON file of `{table: expected_rows}` — the fixture's
+own `SHARED` dict — to make Phase 8 assert rather than just report. Vary
+`--seed` to confirm the result is not seed-dependent.
 
 The unit tests need no database: `pytest tests/`.
 
@@ -244,6 +258,12 @@ Bug reports and PRs welcome. The most useful contributions are:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+LGPL-3.0-or-later — see [LICENSE](LICENSE).
+
+It is not an Odoo module and imports nothing from Odoo, so no licence is
+inherited; copyleft here is a choice. The value of this tool accumulates in its
+skip lists and its NOT NULL fixups, which is exactly the part worth getting
+back. The lesser variant leaves you free to import `odoo18_ee2ce` as a library
+inside your own migration tooling.
 
 Built and used in production by [Symbifox](https://symbifox.com) (Les services de consultation Blue Fox, Inc.) to migrate the company's own SaaS instance to self-hosted Community in February 2026.

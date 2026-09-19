@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.0 — 2026-09-18
+
+**Changed**
+
+- Relicensed from MIT to **LGPL-3.0-or-later**. This is not an Odoo module and
+  imports nothing from Odoo, so no licence was inherited and none was owed;
+  copyleft is a deliberate choice. What makes this tool worth anything is its
+  skip lists and its NOT NULL fixups, which grow one migration at a time — the
+  lesser variant asks for those back while still letting you import
+  `odoo18_ee2ce` as a library inside your own tooling.
+- The fixture's row counts are now the measured inventory rounded to orders of
+  magnitude rather than its exact figures. Nothing in the pipeline depends on
+  their precision, and exact counts published a company's activity profile.
+
+**Fixed**
+
+- `tests/make_ee_fixture.py` only forced distinct values on single-column
+  UNIQUE indexes, so composite ones — `account_journal` is UNIQUE (code,
+  company_id) — were left to chance and the suite passed or failed on the draw.
+  One column of every unique index is now row-unique.
+- Values were truncated to the column width from the right, which threw away
+  the row id: every `account_journal.code` became `code-` in a `varchar(5)`.
+  Truncation now keeps the id.
+- New `--seed`, so the run can be repeated on different draws. The result above
+  holds on four of them.
+
 ## 0.2.0 — 2026-09-18
 
 **Fixed**

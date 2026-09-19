@@ -11,10 +11,12 @@ without the interesting code path ever running.
 
 What is grounded, and what is modelled
 --------------------------------------
-GROUNDED. The table names and row counts in `INVENTORY` below are transcribed
-from a measured inventory of a real Odoo 18 Enterprise SaaS dump
-(saas~18.3.1.3, 939 tables, 293 installed modules of which 135 Enterprise-only).
-So are the Enterprise-only table names, and the pg_dump 16 preamble.
+GROUNDED. The table names below -- shared, Enterprise-only and skippable alike
+-- are transcribed from a measured inventory of a real Odoo 18 Enterprise SaaS
+dump (saas~18.3.1.3, 939 tables, 293 installed modules of which 135
+Enterprise-only), as is the pg_dump 16 preamble. The row counts are that same
+inventory rounded to orders of magnitude, so the fixture keeps realistic
+proportions without publishing anyone's activity profile.
 
 MODELLED. The *column* names marked `x_ee_*` are synthetic. The others are
 Enterprise field names, but this generator does not trust them: every proposed
@@ -41,50 +43,55 @@ import random
 
 import psycopg2
 
-random.seed(22156)
 
-# ── Grounded: row counts measured on the real Enterprise dump ────────────────
+# ── Volumes: orders of magnitude, rounded ────────────────────────────────────
+# The table names come from the measured inventory of a real Enterprise dump.
+# The counts are that inventory rounded to the nearest round number: enough to
+# keep the fixture's proportions realistic -- a table with thousands of rows
+# behaves differently from one with a handful -- without publishing a company's
+# activity profile. Nothing in the pipeline depends on their precision.
+#
 # Tables that exist on BOTH sides. These drive the column-intersection path.
 SHARED = {
-    "res_partner": 139, "hr_employee": 1, "crm_lead": 43,
-    "project_project": 40, "project_task": 470,
-    "account_move": 587, "account_move_line": 1367,
-    "sale_order": 32, "sale_order_line": 83,
-    "account_analytic_line": 619,
-    "mail_message": 9022, "mail_followers": 1703,
+    "res_partner": 150, "hr_employee": 5, "crm_lead": 50,
+    "project_project": 50, "project_task": 500,
+    "account_move": 600, "account_move_line": 1500,
+    "sale_order": 40, "sale_order_line": 100,
+    "account_analytic_line": 600,
+    "mail_message": 9000, "mail_followers": 1800,
     "discuss_channel": 10,
-    "blog_post": 64, "blog_blog": 2, "blog_tag": 20,
-    "website_visitor": 197,
-    "mailing_contact": 132, "mailing_list": 4,
-    "account_bank_statement": 30, "account_bank_statement_line": 414,
-    "account_account": 382, "account_group": 168,
-    "account_tax": 32, "account_journal": 11,
-    "ir_attachment": 2032,
+    "blog_post": 60, "blog_blog": 5, "blog_tag": 25,
+    "website_visitor": 200,
+    "mailing_contact": 150, "mailing_list": 5,
+    "account_bank_statement": 35, "account_bank_statement_line": 400,
+    "account_account": 400, "account_group": 175,
+    "account_tax": 35, "account_journal": 15,
+    "ir_attachment": 2000,
     # NOT NULL fixup path (Community has mandatory columns Enterprise omits)
-    "product_template": 24, "account_reconcile_model": 6,
+    "product_template": 30, "account_reconcile_model": 10,
 }
 
 # Framework / module-seeded tables the dump carries and the importer must skip.
 SKIPPABLE = {
-    "ir_module_module": 693, "ir_model": 1120, "ir_model_data": 40112,
-    "ir_ui_view": 3894, "ir_config_parameter": 42, "ir_cron": 61,
-    "res_groups": 118, "res_country": 251, "res_currency": 174,
-    "mail_template": 68, "website_page": 10, "website_menu": 15,
-    "spreadsheet_dashboard": 19, "uom_uom": 23,
-    "saas_trial_category": 4, "saas_trial_template": 7,
+    "ir_module_module": 700, "ir_model": 1100, "ir_model_data": 40000,
+    "ir_ui_view": 4000, "ir_config_parameter": 50, "ir_cron": 60,
+    "res_groups": 120, "res_country": 250, "res_currency": 175,
+    "mail_template": 70, "website_page": 10, "website_menu": 15,
+    "spreadsheet_dashboard": 20, "uom_uom": 25,
+    "saas_trial_category": 5, "saas_trial_template": 10,
 }
 
 # Grounded: Enterprise-only tables, absent from Community entirely.
 ENTERPRISE_ONLY = {
-    "helpdesk_ticket": 22, "helpdesk_stage": 5, "helpdesk_team": 1,
-    "documents_document": 60, "documents_tag": 32,
-    "sign_template": 11, "sign_request": 6, "sign_request_item": 12,
-    "knowledge_article": 38,
-    "social_account": 2, "social_stream_post": 45,
-    "sale_subscription_plan": 2, "sale_order_log": 4,
-    "spreadsheet_revision": 7,
-    "account_return": 42, "account_report_line": 204,
-    "account_report_column": 102, "account_report_expression": 314,
+    "helpdesk_ticket": 25, "helpdesk_stage": 5, "helpdesk_team": 5,
+    "documents_document": 60, "documents_tag": 30,
+    "sign_template": 10, "sign_request": 10, "sign_request_item": 15,
+    "knowledge_article": 40,
+    "social_account": 5, "social_stream_post": 50,
+    "sale_subscription_plan": 5, "sale_order_log": 5,
+    "spreadsheet_revision": 10,
+    "account_return": 40, "account_report_line": 200,
+    "account_report_column": 100, "account_report_expression": 300,
 }
 
 # Proposed Enterprise-only columns, by the module that adds them. Any name that
@@ -260,26 +267,42 @@ def gen_value(col, dtype, row_id, nullable, maxlen=None, override=_UNSET):
             return "draft"
         if col == "email":
             return f"contact{row_id}@example.org"
-        val = f"{col}-{row_id}"
-        return val[:maxlen] if maxlen else val
+        return f"{col}-{row_id}"
     return f"v{row_id}"
 
 
-def unique_single_columns(conn, table):
-    """Columns carrying a single-column UNIQUE index on the Community side.
+def unique_index_columns(conn, table):
+    """One column per UNIQUE index on the Community side, to force distinct.
 
     Random values collide in a table of a few hundred rows, and a collision
-    reads exactly like a tool bug in the run output. Reading the indexes keeps
-    the fixture honest without a hand-maintained list per table.
+    reads exactly like a tool bug in the run output. Composite indexes matter
+    as much as single-column ones: `account_journal` is UNIQUE (code,
+    company_id), and leaving both columns random means the fixture passes or
+    fails on luck. Making one column of each index row-unique makes the whole
+    tuple unique.
     """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT a.attname FROM pg_index i "
+            "SELECT i.indexrelid, a.attname, a.attnum "
+            "FROM pg_index i "
             "JOIN pg_attribute a ON a.attrelid = i.indrelid "
             "                   AND a.attnum = ANY(i.indkey) "
-            "WHERE i.indrelid = %s::regclass AND i.indisunique "
-            "AND array_length(i.indkey::int[], 1) = 1", (table,))
-        return {r[0] for r in cur.fetchall()}
+            "WHERE i.indrelid = %s::regclass AND i.indisunique", (table,))
+        rows = cur.fetchall()
+    per_index = {}
+    for idx, col, attnum in rows:
+        per_index.setdefault(idx, []).append((attnum, col))
+    picked = set()
+    for cols in per_index.values():
+        names = [c for _n, c in sorted(cols)]
+        if names == ["id"]:
+            continue
+        # Prefer a column that is not "id" and not an FK, so the value stays
+        # plausible; fall back to the first one.
+        choice = next((c for c in names if c != "id" and not c.endswith("_id")),
+                      next((c for c in names if c != "id"), names[0]))
+        picked.add(choice)
+    return picked
 
 
 def community_schema(conn, table):
@@ -322,8 +345,12 @@ def copy_block(out, table, columns, types, nullables, nrows,
             ov = overrides.get(c, _UNSET) if overrides else _UNSET
             v = gen_value(c, types.get(c, "text"), rid, nullables.get(c, True),
                           maxlen=maxlens.get(c), override=ov)
-            if isinstance(v, str) and maxlens.get(c) and len(v) > maxlens[c]:
-                v = v[:maxlens[c]]
+            ml = maxlens.get(c)
+            if isinstance(v, str) and ml and len(v) > ml:
+                # Cutting from the right throws away the row id -- the only
+                # part that varies -- and every row lands on the same value.
+                tail = str(rid)
+                v = (v[:max(0, ml - len(tail))] + tail)[:ml]
             fields.append(esc(v))
         out.write("\t".join(fields) + "\n")
     out.write("\\.\n\n\n")
@@ -337,9 +364,14 @@ def main():
     ap.add_argument("--user", required=True)
     ap.add_argument("--password", required=True)
     ap.add_argument("--out", required=True, help="Output directory")
+    ap.add_argument("--seed", type=int, default=22156,
+                    help="RNG seed. Vary it to check the run does not pass on "
+                         "luck -- a constraint this generator does not model "
+                         "shows up as a failure on some seeds and not others.")
     ap.add_argument("--source-db", default="enterprise-source",
                     help="Source DB name written into manifest.json")
     args = ap.parse_args()
+    random.seed(args.seed)
 
     os.makedirs(args.out, exist_ok=True)
     conn = psycopg2.connect(host=args.host, port=args.port, dbname=args.db,
@@ -398,7 +430,7 @@ def main():
                 nullables[name] = True
             ee_cols = interleave(cols, extras)
             ov = dict(COLUMN_OVERRIDES.get(table) or {})
-            for uc in unique_single_columns(conn, table):
+            for uc in unique_index_columns(conn, table):
                 if uc == "id" or uc in ov:
                     continue
                 # NULLs never collide; a NOT NULL unique column gets the row id.
